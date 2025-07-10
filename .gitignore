@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+
+# Environments
+trading_heiken_adx/
+
+# Sensitive files
+.env
+
+# Test and log files
+results/
+logs/
+.pytest_cache/
