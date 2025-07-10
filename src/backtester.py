@@ -65,14 +65,28 @@ class Backtester:
                                             'exit_price': exit_price, 'pnl': pnl, 'reason': 'SL'})
                         self.notifier.send_telegram_message(f"Long position closed by SL at {exit_price:.2f}. PnL: {pnl:.2f}")
                         self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit': 0.0, 'stop_loss': 0.0}
-                    elif self.current_position['take_profit_levels'] and current_candle['high'] >= self.current_position['take_profit_levels'][0]:
-                        exit_price = self.current_position['take_profit_levels'][0]
-                        pnl = (exit_price - self.current_position['entry_price']) * self.current_position['quantity']
-                        self.trades.append({'entry_date': self.current_position['entry_date'], 'exit_date': current_candle.name, 
-                                            'type': 'long', 'entry_price': self.current_position['entry_price'], 
-                                            'exit_price': exit_price, 'pnl': pnl, 'reason': 'TP'})
-                        self.notifier.send_telegram_message(f"Long position closed by TP at {exit_price:.2f}. PnL: {pnl:.2f}")
-                        self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit_levels': [], 'stop_loss': 0.0}
+                    elif self.current_position['take_profit_levels']:
+                        # Iterate through take profit levels
+                        for tp_level_idx, tp_price in enumerate(self.current_position['take_profit_levels']):
+                            if current_candle['high'] >= tp_price:
+                                # Close a portion of the position (e.g., 50%)
+                                partial_quantity = self.current_position['quantity'] * 0.5
+                                pnl = (tp_price - self.current_position['entry_price']) * partial_quantity
+                                self.trades.append({'entry_date': self.current_position['entry_date'], 'exit_date': current_candle.name,
+                                                    'type': 'long', 'entry_price': self.current_position['entry_price'],
+                                                    'exit_price': tp_price, 'pnl': pnl, 'reason': f'TP{tp_level_idx + 1}'})
+                                self.notifier.send_telegram_message(f"Long position partial TP{tp_level_idx + 1} hit at {tp_price:.2f}. PnL: {pnl:.2f}")
+                                
+                                # Adjust remaining quantity
+                                self.current_position['quantity'] -= partial_quantity
+                                
+                                # Remove the hit TP level
+                                self.current_position['take_profit_levels'].pop(tp_level_idx)
+                                
+                                # If no quantity left, close the position
+                                if self.current_position['quantity'] <= 0.000001: # Use a small epsilon for float comparison
+                                    self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit_levels': [], 'stop_loss': 0.0}
+                                    break # Exit TP loop if position is fully closed
 
                 elif self.current_position['type'] == 'short':
                     # Update lowest low for trailing stop
@@ -88,14 +102,28 @@ class Backtester:
                                             'exit_price': exit_price, 'pnl': pnl, 'reason': 'SL'})
                         self.notifier.send_telegram_message(f"Short position closed by SL at {exit_price:.2f}. PnL: {pnl:.2f}")
                         self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit': 0.0, 'stop_loss': 0.0}
-                    elif self.current_position['take_profit_levels'] and current_candle['low'] <= self.current_position['take_profit_levels'][0]:
-                        exit_price = self.current_position['take_profit_levels'][0]
-                        pnl = (self.current_position['entry_price'] - exit_price) * self.current_position['quantity']
-                        self.trades.append({'entry_date': self.current_position['entry_date'], 'exit_date': current_candle.name, 
-                                            'type': 'short', 'entry_price': self.current_position['entry_price'], 
-                                            'exit_price': exit_price, 'pnl': pnl, 'reason': 'TP'})
-                        self.notifier.send_telegram_message(f"Short position closed by TP at {exit_price:.2f}. PnL: {pnl:.2f}")
-                        self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit_levels': [], 'stop_loss': 0.0}
+                    elif self.current_position['take_profit_levels']:
+                        # Iterate through take profit levels
+                        for tp_level_idx, tp_price in enumerate(self.current_position['take_profit_levels']):
+                            if current_candle['low'] <= tp_price:
+                                # Close a portion of the position (e.g., 50%)
+                                partial_quantity = self.current_position['quantity'] * 0.5
+                                pnl = (self.current_position['entry_price'] - tp_price) * partial_quantity
+                                self.trades.append({'entry_date': self.current_position['entry_date'], 'exit_date': current_candle.name, 
+                                                    'type': 'short', 'entry_price': self.current_position['entry_price'], 
+                                                    'exit_price': tp_price, 'pnl': pnl, 'reason': f'TP{tp_level_idx + 1}'})
+                                self.notifier.send_telegram_message(f"Short position partial TP{tp_level_idx + 1} hit at {tp_price:.2f}. PnL: {pnl:.2f}")
+                                
+                                # Adjust remaining quantity
+                                self.current_position['quantity'] -= partial_quantity
+                                
+                                # Remove the hit TP level
+                                self.current_position['take_profit_levels'].pop(tp_level_idx)
+                                
+                                # If no quantity left, close the position
+                                if self.current_position['quantity'] <= 0.000001: # Use a small epsilon for float comparison
+                                    self.current_position = {'type': None, 'entry_price': 0.0, 'quantity': 0.0, 'entry_date': None, 'take_profit_levels': [], 'stop_loss': 0.0}
+                                    break # Exit TP loop if position is fully closed
 
             # --- Check for new entry signals ---
             if self.current_position['type'] is None:

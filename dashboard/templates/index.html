@@ -8,66 +8,76 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         .container { max-width: 1200px; margin: auto; }
-        h1 { text-align: center; }
+        h1, h2 { text-align: center; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
         .chart-container { width: 80%; margin: 20px auto; }
+        .results-section { margin-bottom: 40px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Trading Bot Optimization Results</h1>
+        <h1>Trading Bot Dashboard</h1>
         
-        <div class="chart-container">
-            <canvas id="equityCurveChart"></canvas>
+        <div class="results-section">
+            <h2>Backtest Results</h2>
+            <table id="backtestResultsTable">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Backtest data will be dynamically inserted here -->
+                </tbody>
+            </table>
+            <div class="chart-container">
+                <canvas id="equityCurveChart"></canvas>
+            </div>
         </div>
 
-        <h2>Optimization Results Table</h2>
-        <table id="resultsTable">
-            <thead>
-                <tr>
-                    <!-- Headers will be dynamically inserted here -->
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Data will be dynamically inserted here -->
-            </tbody>
-        </table>
+        <div class="results-section">
+            <h2>Optimization Results Table</h2>
+            <table id="optimizationResultsTable">
+                <thead>
+                    <tr>
+                        <!-- Headers will be dynamically inserted here -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Optimization data will be dynamically inserted here -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('/api/results')
+            // Fetch Backtest Results
+            fetch('/api/backtest_results')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.length > 0) {
-                        // Populate table headers
-                        const table = document.getElementById('resultsTable');
-                        const thead = table.querySelector('thead tr');
-                        Object.keys(data[0]).forEach(key => {
-                            let th = document.createElement('th');
-                            th.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                            thead.appendChild(th);
-                        });
-
-                        // Populate table rows
-                        const tbody = table.querySelector('tbody');
-                        data.forEach(row => {
-                            let tr = document.createElement('tr');
-                            Object.values(row).forEach(value => {
+                    const tableBody = document.querySelector('#backtestResultsTable tbody');
+                    if (Object.keys(data).length > 0) {
+                        for (const key in data) {
+                            if (data.hasOwnProperty(key) && key !== 'equity_curve') {
+                                let tr = document.createElement('tr');
+                                let th = document.createElement('th');
+                                th.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                tr.appendChild(th);
                                 let td = document.createElement('td');
-                                td.textContent = typeof value === 'number' ? value.toFixed(4) : value;
+                                td.textContent = typeof data[key] === 'number' ? data[key].toFixed(4) : data[key];
                                 tr.appendChild(td);
-                            });
-                            tbody.appendChild(tr);
-                        });
+                                tableBody.appendChild(tr);
+                            }
+                        }
 
-                        // Plot Equity Curve for the best strategy (assuming first row is best)
-                        const bestStrategy = data[0];
-                        if (bestStrategy.equity_curve) {
-                            const equityData = JSON.parse(bestStrategy.equity_curve);
-                            const labels = Object.keys(equityData);
+                        // Plot Equity Curve from Backtest Results
+                        if (data.equity_curve) {
+                            const equityData = JSON.parse(data.equity_curve);
+                            const labels = Object.keys(equityData).map(timestamp => new Date(parseInt(timestamp)).toLocaleDateString());
                             const values = Object.values(equityData);
 
                             const ctx = document.getElementById('equityCurveChart').getContext('2d');
@@ -86,15 +96,55 @@
                                 options: {
                                     responsive: true,
                                     scales: {
-                                        x: { title: { display: true, text: 'Date' } },
+                                        x: { 
+                                            title: { display: true, text: 'Date' },
+                                            ticks: {
+                                                autoSkip: true,
+                                                maxTicksLimit: 20 // Adjust as needed
+                                            }
+                                        },
                                         y: { title: { display: true, text: 'Equity' } }
                                     }
                                 }
                             });
                         }
+                    } else {
+                        tableBody.innerHTML = '<tr><td colspan="2">No backtest results available.</td></tr>';
                     }
                 })
-                .catch(error => console.error('Error fetching results:', error));
+                .catch(error => console.error('Error fetching backtest results:', error));
+
+            // Fetch Optimization Results
+            fetch('/api/optimization_results')
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.getElementById('optimizationResultsTable');
+                    const thead = table.querySelector('thead tr');
+                    const tbody = table.querySelector('tbody');
+
+                    if (data.length > 0) {
+                        // Populate table headers
+                        Object.keys(data[0]).forEach(key => {
+                            let th = document.createElement('th');
+                            th.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                            thead.appendChild(th);
+                        });
+
+                        // Populate table rows
+                        data.forEach(row => {
+                            let tr = document.createElement('tr');
+                            Object.values(row).forEach(value => {
+                                let td = document.createElement('td');
+                                td.textContent = typeof value === 'number' ? value.toFixed(4) : value;
+                                tr.appendChild(td);
+                            });
+                            tbody.appendChild(tr);
+                        });
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="100%">No optimization results available.</td></tr>';
+                    }
+                })
+                .catch(error => console.error('Error fetching optimization results:', error));
         });
     </script>
 </body>

@@ -5,3 +5,4 @@ ccxt==4.3.4
 yfinance==0.2.36
 python-dotenv==1.0.1
 matplotlib==3.8.2
+Flask

@@ -1,10 +1,12 @@
 
+import os
 import pandas as pd
 from src.config import Config
 from src.data_handler import DataHandler
 from src.indicator_calculator import IndicatorCalculator
 from src.backtester import Backtester
-import itertools
+import numpy as np
+from itertools import product
 import os
 from src.logger import logger
 
@@ -12,87 +14,87 @@ class Optimizer:
     """
     Optimizes strategy parameters by running multiple backtests.
     """
-    def __init__(self):
+    def __init__(self, settings_obj: Config):
         """
         Initializes the Optimizer with a DataHandler and IndicatorCalculator.
         """
-        self.settings = Config()
+        self.settings = settings_obj
         self.data_handler = DataHandler(
-            symbol=self.settings.symbol,
-            timeframe=self.settings.timeframe,
-            exchange_id=self.settings.exchange_id
+            settings_obj=self.settings,
+            mode='backtesting'
         )
-        self.indicator_calculator = IndicatorCalculator()
+        self.indicator_calculator = IndicatorCalculator(settings_obj=self.settings)
+        self.output_dir = os.path.join(os.path.dirname(__file__), '..', 'results')
+        os.makedirs(self.output_dir, exist_ok=True)
 
-    def optimize(self, param_ranges: dict) -> pd.DataFrame:
+    def optimize_strategy(self) -> tuple[dict, float]:
         """
-        Runs backtests for all combinations of parameters and returns the best ones.
-
-        Args:
-            param_ranges (dict): A dictionary where keys are parameter names
-                                 and values are lists of possible values for that parameter.
-                                 Example: {'sma_length': [10, 20, 30], 'adx_threshold': [20, 25]}
-
-        Returns:
-            pd.DataFrame: A DataFrame with results for each parameter combination,
-                          sorted by a chosen metric (e.g., total_pnl).
+        Runs the optimization process over a predefined range of parameters.
         """
-        logger.info("--- Starting Optimization Process ---")
-        
-        # Get historical data once
+        logger.info("--- Starting Strategy Optimization ---")
+
         market_data = self.data_handler.get_data()
-        if market_data is None or market_data.empty:
-            logger.error("[Optimizer] Failed to retrieve data for optimization. Exiting.")
-            return pd.DataFrame()
+
+        # Define parameter ranges for optimization
+        # These ranges should be carefully chosen based on the strategy and asset
+        sma_lengths = [40, 50, 60]
+        adx_thresholds = [20, 25, 30]
+        # Add other parameters you want to optimize
+
+        best_pnl = -np.inf
+        best_params = {}
+        all_results = []
 
         # Generate all combinations of parameters
-        keys = param_ranges.keys()
-        values = param_ranges.values()
-        parameter_combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+        for sma_len, adx_thresh in itertools.product(sma_lengths, adx_thresholds):
+            logger.info(f"Testing params: SMA_Length={sma_len}, ADX_Threshold={adx_thresh}")
 
-        results = []
-        for i, params in enumerate(parameter_combinations):
-            logger.info(f"[Optimizer] Running backtest for combination {i+1}/{len(parameter_combinations)}: {params}")
-            
-            # Temporarily override settings for this backtest
-            original_settings = {attr: getattr(self.settings, attr) for attr in params.keys()}
-            for param, value in params.items():
-                setattr(self.settings, param, value)
+            # Temporarily update settings for the current backtest
+            self.settings.sma_length = sma_len
+            self.settings.adx_threshold = adx_thresh
+            # Update other settings as needed for optimization
 
-            # Recalculate indicators with new parameters
+            # Recalculate indicators with new settings
             data_with_indicators = self.indicator_calculator.add_all_indicators(market_data.copy())
             
-            # Run backtest
-            backtester = Backtester(initial_equity=10000.0)
-            backtest_results = backtester.run_backtest(data_with_indicators.copy())
+            if data_with_indicators.empty:
+                logger.warning(f"Skipping params (SMA_Length={sma_len}, ADX_Threshold={adx_thresh}) due to insufficient data after indicator calculation.")
+                continue
+
+            # Run backtest with current parameters
+            backtester = Backtester(initial_equity=10000.0, settings_obj=self.settings)
+            results = backtester.run_backtest(data_with_indicators)
+
+            current_pnl = results.get('total_pnl', 0.0)
             
-            # Store results
-            combined_results = {**params, **backtest_results}
-            results.append(combined_results)
+            param_results = {
+                'sma_length': sma_len,
+                'adx_threshold': adx_thresh,
+                'total_pnl': current_pnl,
+                'final_equity': results.get('final_equity', 10000.0),
+                'num_trades': results.get('num_trades', 0),
+                'win_rate': results.get('win_rate', 0.0),
+                'profit_factor': results.get('profit_factor', 0.0),
+                'max_drawdown': results.get('max_drawdown', 0.0),
+                'sharpe_ratio': results.get('sharpe_ratio', 0.0),
+                'sortino_ratio': results.get('sortino_ratio', 0.0),
+                'calmar_ratio': results.get('calmar_ratio', 0.0)
+            }
+            all_results.append(param_results)
 
-            # Restore original settings
-            for param, value in original_settings.items():
-                setattr(self.settings, param, value)
+            if current_pnl > best_pnl:
+                best_pnl = current_pnl
+                best_params = {'sma_length': sma_len, 'adx_threshold': adx_thresh}
+        
+        # Save all optimization results to a CSV file
+        if all_results:
+            results_df = pd.DataFrame(all_results)
+            output_file = os.path.join(self.output_dir, 'optimization_results.csv')
+            results_df.to_csv(output_file, index=False)
+            logger.info(f"Optimization results saved to {output_file}")
 
-        results_df = pd.DataFrame(results)
-        if not results_df.empty:
-            results_df.sort_values(by='total_pnl', ascending=False, inplace=True)
-            
-            # Save results to CSV
-            results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'results')
-            if not os.path.exists(results_dir):
-                os.makedirs(results_dir)
-            results_path = os.path.join(results_dir, 'optimization_results.csv')
-            results_df.to_csv(results_path, index=False)
-            logger.info(f"Optimization results saved to {results_path}")
-
-            logger.info("--- Optimization Process Complete ---")
-            logger.info("\n--- Top Optimization Results ---")
-            logger.info(results_df.head())
-        else:
-            logger.warning("No optimization results generated.")
-
-        return results_df
+        logger.info("--- Strategy Optimization Complete ---")
+        return best_params, best_pnl
 
 if __name__ == '__main__':
     """
@@ -105,7 +107,7 @@ if __name__ == '__main__':
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.insert(0, project_root)
 
-    optimizer = Optimizer()
+    optimizer = Optimizer(settings_obj=settings)
 
     # Define ranges for parameters to optimize
     param_ranges = {

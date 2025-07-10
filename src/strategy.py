@@ -59,6 +59,13 @@ class Strategy:
         # Calculate volume threshold for the last candle
         volume_threshold = last_candle[vol_sma_col] * self.settings.volume_multiplier
 
+        # Log individual conditions for debugging
+        logger.debug(f"[Strategy] Last Candle Data: Close={last_candle['close']:.2f}, HA_Close={last_candle['HA_close']:.2f}, HA_Open={last_candle['HA_open']:.2f}, Volume={last_candle['volume']:.2f}")
+        logger.debug(f"[Strategy] Indicators: SMA={last_candle[sma_col]:.2f}, ADX={last_candle[adx_col]:.2f}, RSI={last_candle[rsi_col]:.2f}, VOL_SMA={last_candle[vol_sma_col]:.2f}")
+        logger.debug(f"[Strategy] Volume Threshold: {volume_threshold:.2f}")
+        logger.debug(f"[Strategy] Long Conditions: Volume > Threshold={last_candle['volume'] > volume_threshold}, HA_Close > HA_Open={last_candle['HA_close'] > last_candle['HA_open']}, Close > SMA={last_candle['close'] > last_candle[sma_col]}, ADX > Threshold={last_candle[adx_col] > self.adx_threshold}, RSI > 50={last_candle[rsi_col] > 50}")
+        logger.debug(f"[Strategy] Short Conditions: Volume > Threshold={last_candle['volume'] > volume_threshold}, HA_Close < HA_Open={last_candle['HA_close'] < last_candle['HA_open']}, Close < SMA={last_candle['close'] < last_candle[sma_col]}, ADX > Threshold={last_candle[adx_col] > self.adx_threshold}, RSI < 50={last_candle[rsi_col] < 50}")
+
         # Long entry conditions
         long_condition = (
             last_candle['volume'] > volume_threshold and

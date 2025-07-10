@@ -35,7 +35,7 @@ def mock_settings():
 # Fixture for dummy OHLCV data with enough length for indicators
 @pytest.fixture
 def dummy_ohlcv_data_for_backtest(mock_settings):
-    num_rows = 200 # Sufficient data for indicators and some trades
+    num_rows = 500 # Increased significantly for more realistic data and signals
     dates = pd.to_datetime(pd.date_range('2023-01-01', periods=num_rows, freq='D'))
     
     # Create more realistic price movements
